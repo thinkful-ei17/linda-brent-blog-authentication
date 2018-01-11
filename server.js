@@ -6,6 +6,9 @@ const morgan = require('morgan');
 const mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
+const passport = require('passport');
+const { Strategy: LocalStrategy } = require('passport-local');
+
 const { DATABASE_URL, PORT } = require('./config');
 const { BlogPost, UserInfo } = require('./models');
 
@@ -14,6 +17,45 @@ const app = express();
 app.use(morgan('common'));
 app.use(bodyParser.json());
 
+// ===== Define and create basicStrategy =====
+const localStrategy = new LocalStrategy((username, password, done) => {
+  let user;
+  UserInfo
+    .findOne({ username })
+    .then(results => {
+      user = results;    
+      
+      if (!user) {
+        return Promise.reject({
+          reason: 'LoginError',
+          message: 'Incorrect username',
+          location: 'username'
+        });
+      }    
+    
+      return user.validatePassword(password);
+    })
+    .then(isValid => {
+      if (!isValid) {
+        return Promise.reject({
+          reason: 'LoginError',
+          message: 'Incorrect password',
+          location: 'password'
+        });
+      }
+      return done(null, user);    
+    })
+    .catch(err => {
+      if (err.reason === 'LoginError') {
+        return done(null, false);
+      }
+
+      return done(err);
+
+    });
+});
+
+passport.use(localStrategy);
 
 app.get('/posts', (req, res) => {
   BlogPost
@@ -107,16 +149,16 @@ app.delete('/:id', (req, res) => {
     });
 });
 
-app.post('/users', (req, res) => {
+const localAuth = passport.authenticate('local', { session: false });
+
+app.post('/users', localAuth, function (req, res) {
   const requiredFields = ['username','firstName','lastName','password'];
 
   const missingField = requiredFields.find(field =>!(field in req.body));
 
   const nonStringField = requiredFields.find(
     field => field in req.body && typeof req.body[field] !== 'string');
-  
-  
-
+    
   if (missingField) {
     return res.status(422).json({
       code: 422,
@@ -148,7 +190,39 @@ app.post('/users', (req, res) => {
       res.status(500).json({ error: 'Something went wrong' });
     });
 
+  return UserInfo.find({username})
+    .count()
+    .then(count => {
+      if(count > 0) {
+        return Promise.reject({
+          code: 422, 
+          reason: 'ValidationError',
+          message: 'Username already taken',
+          location: 'username'
+        });
+      }
+
+      return UserInfo.hashPassword(password);  
+    })
+    .then(digest => {
+      return UserInfo.create({
+        username,
+        password: digest,
+        firstName,
+        lastName
+      });
+    })
+    .then(user => {
+      return res.status(201).location(`/users/${user.id}`).json(user.serialize());
+    }) 
+    .catch(err => {
+      if (err.reason === 'ValidationError') {
+        return res.status(err.code).json(err);
+      }
+      res.status(500).json({code: 500, message: 'Internal server error'});
+    });
 });
+
 app.use('*', function (req, res) {
   res.status(404).json({ message: 'Not Found' });
 });

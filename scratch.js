@@ -5,15 +5,15 @@
 
 
 // Add an apiRepr method to the schema which creates a representation of the user which can be securely used as part of the API(i.e.doesn't contain the password!)
-Add a / users POST endpoint to server.js which:
-  Recieves a JSON request body in the following format:
+// Add a / users POST endpoint to server.js which:
+//   Recieves a JSON request body in the following format:
 
-  {
-    "username": "alice_user",
-    "password": "topsecret",
-    "firstName": "Alice",
-    "lastName": "Bobson"
-  }
+//   {
+//     "username": "alice_user",
+//     "password": "topsecret",
+//     "firstName": "Alice",
+//     "lastName": "Bobson"
+//   }
 Returns a 400 Bad Request status if a user already exists with a matching username
 
 Adds the user to the database, storing a salted and hashed version of the password
