@@ -149,9 +149,7 @@ app.delete('/:id', (req, res) => {
     });
 });
 
-const localAuth = passport.authenticate('local', { session: false });
-
-app.post('/users', localAuth, function (req, res) {
+app.post('/users', function (req, res) {
   const requiredFields = ['username','firstName','lastName','password'];
 
   const missingField = requiredFields.find(field =>!(field in req.body));
@@ -176,19 +174,42 @@ app.post('/users', localAuth, function (req, res) {
     });
   }
   
-  const {firstName, lastName, username, password} = req.body;
-  UserInfo
-    .create({
-      username,
-      firstName,
-      lastName,
-      password
-    })
-    .then(user => res.status(201).json(user.serialize()))
-    .catch(err => {
-      console.error(err);
-      res.status(500).json({ error: 'Something went wrong' });
+  const sizedFields = {
+    username: {
+      min: 1
+    },
+    password: {
+      min: 8,
+      // bcrypt truncates after 72 characters, so let's not give the illusion
+      // of security by storing extra (unused) info
+      max: 72
+    }
+  };
+  const tooSmallField = Object.keys(sizedFields).find(
+    field =>
+      'min' in sizedFields[field] &&
+            req.body[field].trim().length < sizedFields[field].min
+  );
+  const tooLargeField = Object.keys(sizedFields).find(
+    field =>
+      'max' in sizedFields[field] &&
+            req.body[field].trim().length > sizedFields[field].max
+  );
+
+  if (tooSmallField || tooLargeField) {
+    return res.status(422).json({
+      code: 422,
+      reason: 'ValidationError',
+      message: tooSmallField
+        ? `Must be at least ${sizedFields[tooSmallField]
+          .min} characters long`
+        : `Must be at most ${sizedFields[tooLargeField]
+          .max} characters long`,
+      location: tooSmallField || tooLargeField
     });
+  }
+
+  const {firstName, lastName, username, password} = req.body;
 
   return UserInfo.find({username})
     .count()
@@ -212,7 +233,7 @@ app.post('/users', localAuth, function (req, res) {
         lastName
       });
     })
-    .then(user => {
+    .then(user => {  //not using nodemon to watch changes keep eye on log!
       return res.status(201).location(`/users/${user.id}`).json(user.serialize());
     }) 
     .catch(err => {
@@ -222,6 +243,15 @@ app.post('/users', localAuth, function (req, res) {
       res.status(500).json({code: 500, message: 'Internal server error'});
     });
 });
+
+const localAuth = passport.authenticate('local', { session: false });
+
+// ===== Protected endpoint =====
+app.post('/login', localAuth, function (req, res) {
+  console.log(`${req.user.username} successfully logged in.`);
+  return res.json({ data: 'Top Secret' });
+}); 
+
 
 app.use('*', function (req, res) {
   res.status(404).json({ message: 'Not Found' });
