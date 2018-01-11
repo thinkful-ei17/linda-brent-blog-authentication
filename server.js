@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
 const { DATABASE_URL, PORT } = require('./config');
-const { BlogPost } = require('./models');
+const { BlogPost, UserInfo } = require('./models');
 
 const app = express();
 
@@ -107,7 +107,48 @@ app.delete('/:id', (req, res) => {
     });
 });
 
+app.post('/users', (req, res) => {
+  const requiredFields = ['username','firstName','lastName','password'];
 
+  const missingField = requiredFields.find(field =>!(field in req.body));
+
+  const nonStringField = requiredFields.find(
+    field => field in req.body && typeof req.body[field] !== 'string');
+  
+  
+
+  if (missingField) {
+    return res.status(422).json({
+      code: 422,
+      reason: 'ValidationError',
+      message: 'Missing field',
+      location: missingField
+    });
+  }
+  if (nonStringField) {
+    return res.status(422).json({
+      code: 422,
+      reason: 'ValidationError',
+      message: 'Incorrect field type: expected string',
+      location: nonStringField
+    });
+  }
+  
+  const {firstName, lastName, username, password} = req.body;
+  UserInfo
+    .create({
+      username,
+      firstName,
+      lastName,
+      password
+    })
+    .then(user => res.status(201).json(user.serialize()))
+    .catch(err => {
+      console.error(err);
+      res.status(500).json({ error: 'Something went wrong' });
+    });
+
+});
 app.use('*', function (req, res) {
   res.status(404).json({ message: 'Not Found' });
 });
